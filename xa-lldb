@@ -1,0 +1,150 @@
+#!/bin/bash
+
+show_usage()
+{
+	echo "Usage: xa-lldb [-d <DEVICE>] <csproj file> <xbuild arguments>."
+}
+
+shell()
+{
+  adb -s "$DEVICE" shell "$@"
+}
+
+while getopts "d:" option ; do
+    case "$option" in
+		d)
+			DEVICE=$OPTARG
+			shift 2
+			;;
+	esac
+done
+
+if [ "$1" == "" ]; then
+	show_usage
+	exit 1
+fi
+
+# Directory with lldb binaries/debug servers
+LLDB_MONO_DIR=`dirname $0`
+NOW=`date +%s`
+CFGFILE=/tmp/lldb-config.$NOW
+
+# Collect information from the csproj
+echo "Running: dbuild /t:_lldb /p:_LldbConfigFile=$CFGFILE /p:AndroidSdkPlatform=24 $*"
+dbuild /t:_lldb /p:_LldbConfigFile=$CFGFILE /p:_AndroidApiLevel=24 $* > dbuild.log 2>&1;
+if [ $? != 0 ]; then
+	cat dbuild.log
+	exit 1
+fi
+rm -f dbuild.log
+
+. $CFGFILE
+rm -f $CFGFILE
+
+if [ ! -f $MANIFEST ]; then
+	echo "Manifest file $MANIFEST not found, make sure to pass the correct /p:Configuration argument."
+	exit 1
+fi
+
+echo "Package: $PKG"
+echo "Manifest file: $MANIFEST"
+
+# Obtain main activity class name
+CLASS=`xmllint --xpath "string(//activity[1]/@*[local-name()='name'])" $MANIFEST`
+if [ $? != 0 ]; then
+	exit 1
+fi
+
+echo "MainActivity class: $CLASS"
+
+if [ "$DEVICE" = "" ]; then
+  DEVICE_COUNT=`adb devices | grep 'device$' | wc -l`
+  if [ $DEVICE_COUNT -eq 1 ]; then
+    DEVICE=`adb devices | grep 'device$' | awk -F"\t+" '{print $1}'`
+  fi
+fi
+echo "Device: $DEVICE"
+
+SOCK="platform-${NOW}.sock"
+ARCH=$(shell "getprop ro.product.cpu.abi" | tr -d '\r')
+
+LLDB_SERVER_ARCH=$ARCH
+if [ "$ARCH" = "armeabi-v7a" ]; then
+  LLDB_SERVER_ARCH="armeabi"
+fi
+
+echo "Architecture: $ARCH"
+
+#LLDB_DIR=$HOME/Library/Android/sdk/lldb/2.2/android
+LLDB_DIR=$LLDB_MONO_DIR/android
+
+R_TMP=/data/local/tmp
+LLDB=/data/data/$PKG/lldb
+LLDB_BIN=$LLDB/bin
+LLDB_SERVER=$LLDB_BIN/lldb-server
+START_SERVER=$LLDB_BIN/start_lldb_server.sh
+LLDB_LOCAL_SERVER=$LLDB_DIR/$LLDB_SERVER_ARCH/lldb-server
+
+if [ ! -f $LLDB_LOCAL_SERVER ]; then
+	echo "Unable to find llvm-server binary at $LLDB_LOCAL_SERVER."
+	exit 1
+fi
+
+echo "Copying lldb-server to device..."
+adb -s "$DEVICE" push $LLDB_DIR/$LLDB_SERVER_ARCH/lldb-server $R_TMP
+adb -s "$DEVICE" push $LLDB_DIR/start_lldb_server.sh $R_TMP
+
+adb -s "$DEVICE" shell 'setprop debug.mono.gdb wait:`date +%s`'
+adb -s "$DEVICE" shell 'setprop debug.mono.debug 1'
+# FIXME: Add to it
+adb -s "$DEVICE" shell 'setprop debug.mono.env MONO_LLDB=1'
+
+echo "Starting app..."
+shell "am start -S -n $PKG/$CLASS -a android.intent.action.MAIN -c android.intent.category.LAUNCHER"
+shell "run-as $PKG mkdir -p $LLDB_BIN"
+shell "rm -f $LLDB_SERVER"
+shell "cat $R_TMP/lldb-server | run-as $PKG sh -c \"cat > $LLDB_SERVER && chmod 700 $LLDB_SERVER\""
+shell "cat $R_TMP/start_lldb_server.sh | run-as $PKG sh -c \"cat > $START_SERVER && chmod 700 $START_SERVER\""
+
+echo "Waiting for app to start..."
+
+for i in 1 2 3 4 5; do
+	PID=$(shell "ps" | grep "$PKG\s*$" | awk -F' +' '{print $2}')
+
+	if [ "$PID" != "" ]; then
+		break
+	fi
+	sleep 1
+done
+
+if [ "$PID" == "" ]; then
+	echo "Can't find process pid."
+	exit 1
+fi
+echo "pid == $PID"
+
+START_FILE=/tmp/lldb_commands.$NOW
+echo "platform select remote-android
+platform connect unix-abstract-connect://[$DEVICE]$LLDB/tmp/$SOCK
+settings set auto-confirm true
+settings set plugin.symbol-file.dwarf.comp-dir-symlink-paths /proc/self/cwd
+process attach -p $PID
+p (void)monodroid_clear_gdb_wait()
+$COMMANDS" > $START_FILE
+
+echo -n "Starting lldb server in the background"
+shell "run-as $PKG $START_SERVER $LLDB unix-abstract $LLDB/tmp $SOCK \"lldb process:gdb-remote packets\""&
+for i in {1..5}; do
+  echo -n ' .'
+  sleep 1
+done
+echo " done."
+
+declare -a PIDS=( `pgrep -P $!` "$!" )
+
+#which lldb
+#lldb -- $DATA_DIR/DebugClang/lldb -s $START_FILE
+$LLDB_MONO_DIR/lldb -s $START_FILE
+
+rm $START_FILE
+kill "${PIDS[@]}"

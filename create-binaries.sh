@@ -1,9 +1,10 @@
 #!/bin/bash
 
 lldb_srcdir=$1
+version=$2
 
-if [ "$lldb_srcdir" == "" ]; then
-	echo "Usage: create-binaries.sh <llvm source dir>"
+if [ "$lldb_srcdir" == "" -o "$version" == "" ]; then
+	echo "Usage: create-binaries.sh <llvm source dir> <version>"
 	exit 1
 fi
 
@@ -18,15 +19,37 @@ if [ "$build_root" == "" ]; then
 	exit 1
 fi
 
-echo "LLDB build dir: $build_root"
-echo "Target dir: $PWD/Release"
+sdk_dir=$HOME/Library/Android/sdk
+lldb_android_dir=$sdk_dir/lldb/2.2/android
+if [ ! -d $lldb_android_dir ]; then
+	echo "Unable to find directory '$lldb_android_dir'."
+	echo "Make sure you have Android Studio installed."
+	exit 1
+fi
 
-cp -r $build_root/Release .
+target=$PWD/lldb-mono-$version
+
+echo "LLDB build dir: $build_root"
+
+rm -rf $target
+mkdir -p $target
+
+# Copy lldb binaries
+cp -r $build_root/Release/* $target
+
+# Copy debugserver binaries
+cp -r $lldb_android_dir $target/
+
+# Copy other files
+cp xa-lldb README.md $target/
 
 # Delete files we don't need
-rm Release/liblldb-core.a
-rm -rf Release/lldb-argdumper Release/lldb-server Release/lldb-argdumper.dSYM Release/debugserver.dSYM
-rm -rf Release/LLDB.framework/Resources/lldb-server
-rm -rf Release/LLDB.framework/Versions/{Current,A}
+rm $target/liblldb-core.a $target/lldb-argdumper $target/lldb-server $target/lldb-argdumper.dSYM $target/debugserver.dSYM
+rm -rf $target/LLDB.framework/Resources/lldb-server
+rm -rf $target/LLDB.framework/Versions/{Current,A}
 
-du -sk Release
+du -sk $target
+
+tar cvzf lldb-mono-$version.tar.gz lldb-mono-$version
+
+echo "Result file: lldb-mono-$version.tar.gz."

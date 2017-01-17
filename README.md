@@ -17,9 +17,13 @@ Create a code signing certificate using the instructions at:
 
 	https://llvm.org/svn/llvm-project/lldb/trunk/docs/code-signing.txt
 
+This only needs to be done once per machine.
+
 Codesign the debugserver binary:
 
 	codesign -f -s lldb_codesign LLDB.framework/Resources/debugserver
+
+This is not needed for debugging on android.
 
 Usage
 =====
@@ -38,6 +42,13 @@ In another window do:
 
 	lldb -p `pgrep mono`
 
+Usage with Xamarin.Android
+==========================
+
+Run the `xa-lldb` script with the csproj file as the argument, i.e.
+
+	$DIR/xa-lldb test.csproj
+
 Recreating the binaries
 =======================
 
@@ -46,9 +57,8 @@ Recreating the binaries
 
 	xcodebuild build -workspace lldb.xcworkspace -scheme lldb-tool -configuration Release
 
-3. Copy the binaries by running
+3. Run the create-binaries script:
 
-	./create-binaries.sh <lldb source dir>
+	./create-binaries.sh <lldb source dir> <version number>
 
-4. Create a release from the contents of the 'Release' dir
-
+4. Create a github release from the lldb-mono-<version>.tar.gz file.
