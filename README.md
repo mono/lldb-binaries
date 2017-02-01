@@ -49,6 +49,15 @@ Run the `xa-lldb` script with the csproj file as the argument, i.e.
 
 	$DIR/xa-lldb test.csproj
 
+Usage with Xamarin.IOS
+======================
+
+1. Set the `MONO_LLDB` environment variable to `1` in Project Options/Run
+in Xamarin Studio.
+2, Start the app using the IOS simulator
+3. Find the process corresponding to the app
+4. Run `lldb -p <pid>
+
 Recreating the binaries
 =======================
 

@@ -30,8 +30,8 @@ NOW=`date +%s`
 CFGFILE=/tmp/lldb-config.$NOW
 
 # Collect information from the csproj
-echo "Running: dbuild /t:_lldb /p:_LldbConfigFile=$CFGFILE /p:AndroidSdkPlatform=24 $*"
-dbuild /t:_lldb /p:_LldbConfigFile=$CFGFILE /p:_AndroidApiLevel=24 $* > dbuild.log 2>&1;
+echo "Running: xabuild /t:_lldb /p:_LldbConfigFile=$CFGFILE /p:AndroidSdkPlatform=24 $*"
+xabuild /t:_lldb /p:_LldbConfigFile=$CFGFILE /p:_AndroidApiLevel=24 $* > dbuild.log 2>&1;
 if [ $? != 0 ]; then
 	cat dbuild.log
 	exit 1
