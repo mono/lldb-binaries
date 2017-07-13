@@ -49,6 +49,15 @@ Run the `xa-lldb` script with the csproj file as the argument, i.e.
 
 	$DIR/xa-lldb test.csproj
 
+To debug applications in release mode, add the following to the
+source:
+
+[assembly: Android.App.Application(Debuggable = true)]
+
+And run with:
+
+	$DIR/xa-lldb test.csproj /p:Configuration=Release
+
 Usage with Xamarin.IOS
 ======================
 
