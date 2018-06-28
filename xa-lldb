@@ -50,7 +50,7 @@ echo "Package: $PKG"
 echo "Manifest file: $MANIFEST"
 
 # Obtain main activity class name
-CLASS=`xmllint --xpath "string(//activity[1]/@*[local-name()='name'])" $MANIFEST`
+CLASS=`xpath $MANIFEST 'string(//activity[intent-filter/action/@android:name="android.intent.action.MAIN" and intent-filter/category/@android:name="android.intent.category.LAUNCHER"]/@android:name)' 2>/dev/null`
 if [ $? != 0 ]; then
 	exit 1
 fi
